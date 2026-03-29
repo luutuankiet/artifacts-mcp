@@ -44,6 +44,14 @@ function createServer(baseUrl) {
       description: z.string().default('').describe('Optional description shown in gallery'),
     },
     async ({ source, title, format, slug: customSlug, libraries, description }) => {
+      // Validate source is not empty
+      if (!source || !source.trim()) {
+        return {
+          content: [{ type: 'text', text: 'Error: source is empty. Provide JSX or HTML content.' }],
+          isError: true,
+        };
+      }
+
       const datePrefix = new Date().toISOString().slice(0, 10);
       const slug = customSlug || `${datePrefix}-${slugify(title)}`;
 
