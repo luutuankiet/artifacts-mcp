@@ -15,11 +15,32 @@ import * as esbuild from 'esbuild';
 function normalizeSource(source) {
   let s = source.trim();
 
-  // 1. Auto-inject React import if missing
+  // ── Preamble extraction ────────────────────────────────────────────────────────────
+  // CRITICAL: Only scan the import preamble (top-of-file imports) for
+  // React/export detection. Scanning the full source causes false positives
+  // when JSX strings contain "import React" or "export default" as text
+  // (e.g., an explainer artifact that discusses the build pipeline).
+  const lines = s.split('\n');
+  let preambleEnd = 0;
+  for (let i = 0; i < lines.length && i < 50; i++) {
+    const line = lines[i].trim();
+    if (line === '' || line.startsWith('//') || line.startsWith('/*') ||
+        line.startsWith('*') || line.startsWith('import ') ||
+        line.startsWith('export ') || line.startsWith("'use strict'") ||
+        line.startsWith('"use strict"')) {
+      preambleEnd = i + 1;
+      continue;
+    }
+    break;
+  }
+  const preamble = lines.slice(0, Math.max(preambleEnd, 1)).join('\n');
+
+  // 1. Auto-inject React import if missing FROM THE PREAMBLE
   //    Claude.ai artifacts never import React (it's a global).
   //    esbuild classic JSX needs React in scope → require('react') via CJS shim.
   //    We inject `import React from 'react'` so esbuild → `require('react')` → CDN global.
-  const hasReactImport = /^\s*import\s+React[\s,{]/m.test(s);
+  //    Only check the preamble — not JSX string content in the body.
+  const hasReactImport = /^\s*import\s+React[\s,{]/m.test(preamble);
   if (!hasReactImport) {
     s = `import React from 'react';\n${s}`;
   }
@@ -33,10 +54,11 @@ function normalizeSource(source) {
                      'createContext', 'createRef', 'forwardRef', 'memo', 'lazy',
                      'Suspense', 'Fragment', 'StrictMode'];
   const usedHooks = hookNames.filter(h => {
-    // Used as identifier but not already in an import statement
+    // Used as identifier anywhere in source
     const usageRegex = new RegExp(`\\b${h}\\b`);
+    // Only check preamble for existing import (not string content in body)
     const importRegex = new RegExp(`import\\s.*\\b${h}\\b.*from\\s+['"]react['"]`);
-    return usageRegex.test(s) && !importRegex.test(s);
+    return usageRegex.test(s) && !importRegex.test(preamble);
   });
   if (usedHooks.length > 0) {
     // Add destructured import: const { useState, useEffect } = React;
@@ -53,7 +75,9 @@ function normalizeSource(source) {
   //    Common patterns that need wrapping:
   //    - `function App() {}` with no export → add export default App
   //    - `const App = () => {}` with no export → add export default App
-  const hasDefaultExport = /export\s+default\b/.test(s);
+  // Only check non-indented lines (column 0) to avoid matching
+  // "export default" inside JSX strings or template literals.
+  const hasDefaultExport = lines.some(line => /^export\s+default\b/.test(line));
   if (!hasDefaultExport) {
     // Look for common component patterns
     const funcMatch = s.match(/^(?:function|const|let|var)\s+(App|Component|Main|Default|Page|Root|View|Dashboard|Demo|Example|Viewer|Explorer|Builder|Calculator|Chart|Game|Player|Editor|Manager|Tracker|Monitor|Analyzer|Visualizer|Simulator|Generator|Counter|Timer|Clock|Form|Table|List|Grid|Card|Panel|Layout|Wrapper|Container|Widget|Tool|Helper)\b/m);

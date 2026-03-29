@@ -85,14 +85,23 @@ async function handleToolCall(name, args, baseUrl) {
       const slug = customSlug || `${datePrefix}-${slugify(title)}`;
 
       let html;
+      const t0 = Date.now();
       if (format === 'html') {
         html = source;
+        console.log(`[publish] slug=${slug} format=html size=${Buffer.byteLength(source)}B`);
       } else {
         // Auto-detect libraries from source if none specified
         const effectiveLibs = libraries.length > 0 ? libraries : detectLibraries(source);
+        console.log(`[publish] slug=${slug} format=jsx libs=[${effectiveLibs}] sourceSize=${Buffer.byteLength(source)}B`);
+
         // Compile JSX server-side (fail-fast on syntax errors)
-        const { code } = await compileJsx(source);
+        const { code, warnings } = await compileJsx(source);
+        const compileMs = Date.now() - t0;
+        console.log(`[publish] compiled in ${compileMs}ms → ${code.length}B JS`);
+        if (warnings.length > 0) console.log(`[publish] warnings:`, warnings.map(w => w.text));
+
         html = buildHtml(code, title, effectiveLibs);
+        console.log(`[publish] html=${html.length}B hasRequire=${html.includes('require("react")')} hasExport=${html.includes('module.exports')}`);
       }
 
       const meta = await saveArtifact(slug, html, {

@@ -38,6 +38,13 @@ export function getAvailableLibraries() {
  * @returns {string} Complete HTML document
  */
 export function buildHtml(compiledJs, title, libraries = []) {
+  // Debug: verify we received compiled JS, not raw source
+  const hasReactRequire = compiledJs.includes('require("react")');
+  const firstLine = compiledJs.split('\n')[0];
+  console.log(`[buildHtml] received ${compiledJs.length}B, hasRequire=${hasReactRequire}, firstLine="${firstLine.slice(0,80)}"`);
+  if (!hasReactRequire && compiledJs.includes('useState')) {
+    console.error('[buildHtml] WARNING: received raw JSX instead of compiled JS!');
+  }
   const libs = getLibs();
 
   // Core libs: React + ReactDOM (NO Babel)
@@ -78,6 +85,23 @@ window.require = function(name) {
   return {};
 };
 window.exports = {}; window.module = { exports: {} };
+
+// Spread library exports onto window for bare identifier access.
+// Claude.ai artifacts use components as globals (e.g., <BarChart> not
+// Recharts.BarChart), so we need window.BarChart = Recharts.BarChart etc.
+// This runs after CDN scripts load but before compiled JS executes.
+var _libGlobals = ${JSON.stringify(Object.fromEntries(
+  Object.entries(requireMap).filter(([, g]) => g !== 'React' && g !== 'ReactDOM' && g !== 'tailwind')
+))};
+Object.keys(_libGlobals).forEach(function(name) {
+  var g = _libGlobals[name];
+  var lib = window[g];
+  if (lib && typeof lib === 'object') {
+    Object.keys(lib).forEach(function(k) {
+      if (!window[k]) window[k] = lib[k];
+    });
+  }
+});
 </script>`;
 
   // Escape closing script tags in the compiled JS
@@ -103,29 +127,67 @@ window.exports = {}; window.module = { exports: {} };
 ${escapedJs}
 
 // Auto-mount: find the component to render
-// Priority: module.exports.default (CJS default export from esbuild)
-//           module.exports (direct CJS export)
-//           global App (common convention)
-var _ArtifactComponent = (module.exports && module.exports.default) ? module.exports.default
-  : (module.exports && typeof module.exports === 'function') ? module.exports
-  : (exports && exports.default) ? exports.default
-  : typeof App !== 'undefined' ? App
-  : typeof _default_export !== 'undefined' ? _default_export
-  : null;
+// esbuild CJS output sets module.exports = { __esModule: true, default: Component }
+// The __esModule wrapper uses defineProperty getters, so we access .default carefully
+var _m = module.exports;
+var _ArtifactComponent = null;
+try {
+  // 1. CJS default export (esbuild: module.exports.default)
+  if (_m && _m.__esModule && _m.default) _ArtifactComponent = _m.default;
+  // 2. Direct CJS export (module.exports = Component)
+  else if (_m && typeof _m === 'function') _ArtifactComponent = _m;
+  // 3. Named export on exports object
+  else if (typeof exports !== 'undefined' && exports.default) _ArtifactComponent = exports.default;
+  // 4. Global App (bare function App() {} without export)
+  else if (typeof App !== 'undefined') _ArtifactComponent = App;
+  // 5. Legacy _default_export
+  else if (typeof _default_export !== 'undefined') _ArtifactComponent = _default_export;
+} catch(e) {
+  document.getElementById('root').innerHTML = '<div class="artifact-error">Mount Error: ' + e.message + '</div>';
+}
 
 if (_ArtifactComponent) {
-  var root = ReactDOM.createRoot(document.getElementById('root'));
-  root.render(React.createElement(_ArtifactComponent));
+  try {
+    var _root = ReactDOM.createRoot(document.getElementById('root'));
+    _root.render(React.createElement(_ArtifactComponent));
+  } catch(e) {
+    document.getElementById('root').innerHTML = '<div class="artifact-error">React Render Error:\n' + e.message + '\n\nStack:\n' + (e.stack || '').split('\n').slice(0,5).join('\n') + '</div>';
+  }
 } else {
+  var _dbg = 'module.exports type: ' + typeof _m
+    + '\nmodule.exports keys: ' + (typeof _m === 'object' && _m ? Object.keys(_m).join(', ') : 'N/A')
+    + '\n__esModule: ' + (_m && _m.__esModule)
+    + '\ntypeof App: ' + typeof App;
   document.getElementById('root').innerHTML =
-    '<div class="artifact-error">Error: No App or default export found in artifact source.</div>';
+    '<div class="artifact-error">Error: No component found to render.\n\nDebug info:\n' + _dbg + '</div>';
 }
   </script>
   <script>
+    // Catch ALL errors — both sync and async — and show them visually
     window.addEventListener('error', function(e) {
       var root = document.getElementById('root');
-      if (root && !root.hasChildNodes()) {
-        root.innerHTML = '<div class="artifact-error">Runtime Error:\n' + e.message + '</div>';
+      var msg = 'Runtime Error:\n' + e.message;
+      if (e.filename) msg += '\n\nFile: ' + e.filename + ':' + e.lineno + ':' + e.colno;
+      if (e.error && e.error.stack) msg += '\n\nStack:\n' + e.error.stack.split('\n').slice(0,8).join('\n');
+      if (root && (!root.hasChildNodes() || root.querySelector('.artifact-error'))) {
+        root.innerHTML = '<div class="artifact-error">' + msg + '</div>';
+      } else {
+        // App rendered but hit a runtime error — overlay it
+        var overlay = document.createElement('div');
+        overlay.className = 'artifact-error';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#fef2f2;border-bottom:2px solid #dc2626;max-height:40vh;overflow:auto;font-size:12px';
+        overlay.textContent = msg;
+        document.body.prepend(overlay);
+      }
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      var root = document.getElementById('root');
+      if (root) {
+        var overlay = document.createElement('div');
+        overlay.className = 'artifact-error';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#fef2f2;border-bottom:2px solid #dc2626;max-height:40vh;overflow:auto;font-size:12px';
+        overlay.textContent = 'Unhandled Promise Rejection:\n' + (e.reason ? e.reason.message || e.reason : 'unknown');
+        document.body.prepend(overlay);
       }
     });
   </script>
