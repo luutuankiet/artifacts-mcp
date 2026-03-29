@@ -1,5 +1,19 @@
 node_modules/
 artifacts/
+data/
 incoming/
 .env
 *.log
+docker-compose.yaml
+
+# Dev utilities with hardcoded config
+add-server*.cjs
+add-server*.js
+approve-server.cjs
+check-servers.cjs
+find-status.cjs
+fix-upstream.cjs
+test-wrapper.cjs
+
+# Project management (private)
+gsd-lite/

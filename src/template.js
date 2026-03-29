@@ -52,6 +52,23 @@ export function buildJsxHtml(source, title, libraries = []) {
     }
   }
 
+  // Build require shim from libs manifest so import statements work
+  // Babel standalone compiles `import X from 'y'` → `require('y')`
+  // Without this shim, require() is undefined → ReferenceError → raw source leaks into DOM
+  const requireMap = {};
+  // Core libs
+  for (const [name, info] of Object.entries(libs.core)) {
+    if (info.global) requireMap[name] = info.global;
+  }
+  // Add react-dom/client alias (common import path)
+  requireMap['react-dom/client'] = 'ReactDOM';
+  // Optional libs (all of them, not just requested — harmless to map extras)
+  for (const [name, info] of Object.entries(libs.optional)) {
+    if (info.global) requireMap[name] = info.global;
+  }
+
+  const requireShim = `<script>\n// Module shim: Babel compiles import→require(), this maps to CDN globals\nwindow.require = function(name) {\n  const map = ${JSON.stringify(requireMap)};\n  const g = map[name];\n  if (g && window[g]) return window[g];\n  console.warn('require("' + name + '"): no CDN global mapped');\n  return {};\n};\nwindow.exports = {}; window.module = { exports: {} };\n</script>`;
+
   // Escape the source for embedding in a script tag
   const escapedSource = source
     .replace(/<\/script>/gi, '<\\/script>');
@@ -63,6 +80,7 @@ export function buildJsxHtml(source, title, libraries = []) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
   ${scripts.join('\n  ')}
+  ${requireShim}
   <style>
     body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     #root { min-height: 100vh; }

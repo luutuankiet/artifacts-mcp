@@ -138,18 +138,9 @@ async function handleToolCall(name, args, baseUrl) {
 
 const sessions = new Map();
 
-export function handleMcp(app, apiKey, baseUrl) {
+export function handleMcp(app, baseUrl) {
+  // Auth handled by Traefik basicauth - no app-level key check
   app.post('/mcp', (req, res) => {
-    // API key check — skip for read-only methods (initialize, tools/list, ping)
-    // This allows mcpproxy-go to connect without OAuth negotiation issues
-    const { method: rpcMethod } = req.body;
-    const readOnlyMethods = ['initialize', 'notifications/initialized', 'tools/list', 'ping'];
-    if (!readOnlyMethods.includes(rpcMethod)) {
-      const providedKey = req.query.apikey || req.headers['x-api-key'];
-      if (apiKey && providedKey !== apiKey) {
-        return res.status(401).json(makeJsonRpcError(null, -32001, 'Unauthorized: invalid API key'));
-      }
-    }
 
     const { jsonrpc, id, method, params } = req.body;
 
@@ -172,7 +163,7 @@ export function handleMcp(app, apiKey, baseUrl) {
       }
 
       case 'notifications/initialized':
-        return res.status(204).end();
+        return res.status(202).end();
 
       case 'tools/list':
         return res.json(makeJsonRpcResponse(id, {
@@ -196,7 +187,20 @@ export function handleMcp(app, apiKey, baseUrl) {
   });
 
   // Handle GET for SSE (not needed for Streamable HTTP request/response, but some clients probe)
+  // Streamable HTTP spec: GET is for SSE session establishment.
+  // Server MUST return 405 if it doesn't support server-initiated messages.
+  // mcp-go handles 405 gracefully (stops GET listener). Returning 200+JSON
+  // causes mcp-go to loop forever expecting SSE stream.
   app.get('/mcp', (req, res) => {
-    res.status(405).json({ error: 'This MCP server uses Streamable HTTP (POST only)' });
+    res.status(405).set('Allow', 'POST, DELETE').end();
+  });
+
+  // Handle DELETE for session termination per spec
+  app.delete('/mcp', (req, res) => {
+    const sessionId = req.headers['mcp-session-id'];
+    if (sessionId && sessions.has(sessionId)) {
+      sessions.delete(sessionId);
+    }
+    res.status(200).end();
   });
 }

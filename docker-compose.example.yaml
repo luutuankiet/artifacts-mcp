@@ -1,0 +1,29 @@
+services:
+  artifact-server:
+    build: .
+    container_name: artifact-server
+    restart: unless-stopped
+    environment:
+      - PORT=3333
+      - BASE_URL=${BASE_URL:-https://your-domain.example.com}
+    ports:
+      - "3333:3333"
+    volumes:
+      - ./data/artifacts:/app/artifacts
+    labels:
+      # Traefik reverse proxy example (adjust to your setup)
+      - traefik.enable=true
+      - traefik.http.routers.artifacts.rule=Host(`your-domain.example.com`)
+      - traefik.http.routers.artifacts.entrypoints=websecure
+      - traefik.http.routers.artifacts.tls.certresolver=letsencrypt
+      - traefik.http.services.artifacts.loadbalancer.server.port=3333
+      # Optional: basicauth middleware
+      # Generate hash: htpasswd -nb user password
+      # - traefik.http.routers.artifacts.middlewares=artifacts-auth
+      # - traefik.http.middlewares.artifacts-auth.basicauth.users=user:$$apr1$$hash$$here
+    networks:
+      - frontend
+
+networks:
+  frontend:
+    external: true
