@@ -2,6 +2,7 @@ import express from 'express';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { handleMcp } from './mcp.js';
+import { handleWhiteboard } from './whiteboard.js';
 import { listArtifacts } from './storage.js';
 import { galleryHtml } from './gallery.js';
 
@@ -66,6 +67,9 @@ app.delete('/api/artifacts/:slug', (req, res) => {
 
 
 
+// Whiteboard — instant SVG/HTML rendering
+handleWhiteboard(app, BASE_URL);
+
 // MCP endpoint (SDK-backed)
 handleMcp(app, BASE_URL);
 
@@ -74,5 +78,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  Gallery:   ${BASE_URL}/`);
   console.log(`  Artifacts: ${BASE_URL}/artifacts/`);
   console.log(`  MCP:       ${BASE_URL}/mcp`);
+  console.log(`  Whiteboard:${BASE_URL}/whiteboard`);
   console.log(`  Auth:      Traefik basicauth`);
 });

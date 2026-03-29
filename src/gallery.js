@@ -9,6 +9,7 @@ export function galleryHtml(artifacts, baseUrl) {
       <td>${new Date(a.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
       <td>
         <a href="${a.url}" target="_blank" class="btn btn-open">Open</a>
+        <a href="${a.url}" download="${esc(a.slug)}.html" class="btn btn-download">Download</a>
         <button class="btn btn-delete" onclick="deleteArtifact('${esc(a.slug)}')">Delete</button>
       </td>
     </tr>`).join('\n');
@@ -41,6 +42,8 @@ export function galleryHtml(artifacts, baseUrl) {
     .btn { display: inline-block; padding: 0.3rem 0.7rem; border-radius: 4px; font-size: 0.8rem; cursor: pointer; border: none; text-decoration: none; }
     .btn-open { background: #1e40af; color: #fff; }
     .btn-open:hover { background: #2563eb; text-decoration: none; }
+    .btn-download { background: #1e3a5f; color: #93c5fd; margin-left: 0.3rem; }
+    .btn-download:hover { background: #1d4ed8; text-decoration: none; }
     .btn-delete { background: #7f1d1d; color: #fca5a5; margin-left: 0.3rem; }
     .btn-delete:hover { background: #991b1b; }
     .btn-bulk-delete { background: #991b1b; color: #fca5a5; padding: 0.4rem 1rem; font-size: 0.85rem; }

@@ -8,7 +8,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test:e2e": "node tests/e2e-stress.mjs",
-    "test:render": "node tests/render-smoke.mjs"
+    "test:render": "node tests/render-smoke.mjs",
+    "test:whiteboard": "node tests/whiteboard-e2e.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

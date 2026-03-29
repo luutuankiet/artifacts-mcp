@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { compileJsx, detectLibraries } from './compiler.js';
 import { buildHtml, getAvailableLibraries } from './template.js';
 import { saveArtifact, listArtifacts, getArtifact, deleteArtifact } from './storage.js';
+import { broadcastWhiteboard } from './whiteboard.js';
 
 const PROTOCOL_VERSION = '2025-03-26';
 
@@ -59,6 +60,25 @@ function getToolDefinitions() {
         type: 'object',
         required: ['slug'],
         properties: { slug: { type: 'string', description: 'Artifact slug to delete' } },
+      },
+    },
+    {
+      name: 'write_whiteboard',
+      description: [
+        'Push SVG or HTML to the live whiteboard. Content renders instantly in any connected browser — zero compilation, zero page reload.',
+        'Best for: diagrams, flowcharts, architecture visuals, data visualizations, any visual explanation.',
+        'The user opens /whiteboard in a browser tab once. Every call to this tool updates that tab instantly via SSE.',
+        'For SVG: write complete <svg> markup. For HTML: write any HTML fragment (inline styles, inline SVG, etc).',
+        'History is preserved — the user can click back to previous whiteboard states.',
+      ].join('\n'),
+      inputSchema: {
+        type: 'object',
+        required: ['content', 'title'],
+        properties: {
+          content: { type: 'string', description: 'SVG markup (starting with <svg) or HTML fragment to render' },
+          title: { type: 'string', description: 'Short title for this whiteboard update (shown in history bar)' },
+          format: { type: 'string', enum: ['svg', 'html'], default: 'svg', description: 'Content format. Auto-detected from content if omitted.' },
+        },
       },
     },
   ];
@@ -137,6 +157,27 @@ async function handleToolCall(name, args, baseUrl) {
       const deleted = await deleteArtifact(args.slug);
       if (!deleted) return { content: [{ type: 'text', text: `Artifact "${args.slug}" not found` }], isError: true };
       return { content: [{ type: 'text', text: `Deleted artifact "${args.slug}"` }] };
+    }
+
+    case 'write_whiteboard': {
+      const { content, title } = args;
+      if (!content || !content.trim()) {
+        return { content: [{ type: 'text', text: 'Error: content is empty. Provide SVG or HTML markup.' }], isError: true };
+      }
+      const format = args.format || (content.trimStart().startsWith('<svg') ? 'svg' : 'html');
+      const clientCount = broadcastWhiteboard(content, title, format);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            whiteboard_url: `${baseUrl}/whiteboard`,
+            title,
+            format,
+            content_size_bytes: Buffer.byteLength(content, 'utf-8'),
+            clients_updated: clientCount,
+          }, null, 2),
+        }],
+      };
     }
 
     default:
