@@ -3,7 +3,8 @@
   "core": {
     "react": { "version": "18.3.1", "cdn": "https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js", "global": "React" },
     "react-dom": { "version": "18.3.1", "cdn": "https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js", "global": "ReactDOM" },
-    "_note": "babel-standalone removed — JSX is now compiled server-side by esbuild"
+    "prop-types": { "version": "15.8.1", "cdn": "https://cdn.jsdelivr.net/npm/prop-types@15.8.1/prop-types.min.js", "global": "PropTypes" },
+    "_note": "babel-standalone removed — JSX is now compiled server-side by esbuild. prop-types added as peer dep for recharts UMD."
   },
   "optional": {
     "tailwindcss": { "version": "3.4.0", "cdn": "https://cdn.tailwindcss.com/3.4.0", "global": "tailwind", "type": "script" },

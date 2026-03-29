@@ -47,10 +47,14 @@ export function buildHtml(compiledJs, title, libraries = []) {
   }
   const libs = getLibs();
 
-  // Core libs: React + ReactDOM (NO Babel)
+  // Core libs: React + ReactDOM + PropTypes (NO Babel)
   const scripts = [];
   scripts.push(`<script crossorigin src="${libs.core.react.cdn}"></script>`);
   scripts.push(`<script crossorigin src="${libs.core['react-dom'].cdn}"></script>`);
+  // prop-types is a peer dependency of Recharts UMD — must load before it
+  if (libs.core['prop-types']) {
+    scripts.push(`<script crossorigin src="${libs.core['prop-types'].cdn}"></script>`);
+  }
 
   // Tailwind CDN — always include
   const tw = libs.optional.tailwindcss;
@@ -151,24 +155,24 @@ if (_ArtifactComponent) {
     var _root = ReactDOM.createRoot(document.getElementById('root'));
     _root.render(React.createElement(_ArtifactComponent));
   } catch(e) {
-    document.getElementById('root').innerHTML = '<div class="artifact-error">React Render Error:\n' + e.message + '\n\nStack:\n' + (e.stack || '').split('\n').slice(0,5).join('\n') + '</div>';
+    document.getElementById('root').innerHTML = '<div class="artifact-error">React Render Error:\\n' + e.message + '\\n\\nStack:\\n' + (e.stack || '').split('\\n').slice(0,5).join('\\n') + '</div>';
   }
 } else {
   var _dbg = 'module.exports type: ' + typeof _m
-    + '\nmodule.exports keys: ' + (typeof _m === 'object' && _m ? Object.keys(_m).join(', ') : 'N/A')
-    + '\n__esModule: ' + (_m && _m.__esModule)
-    + '\ntypeof App: ' + typeof App;
+    + '\\nmodule.exports keys: ' + (typeof _m === 'object' && _m ? Object.keys(_m).join(', ') : 'N/A')
+    + '\\n__esModule: ' + (_m && _m.__esModule)
+    + '\\ntypeof App: ' + typeof App;
   document.getElementById('root').innerHTML =
-    '<div class="artifact-error">Error: No component found to render.\n\nDebug info:\n' + _dbg + '</div>';
+    '<div class="artifact-error">Error: No component found to render.\\n\\nDebug info:\\n' + _dbg + '</div>';
 }
   </script>
   <script>
     // Catch ALL errors — both sync and async — and show them visually
     window.addEventListener('error', function(e) {
       var root = document.getElementById('root');
-      var msg = 'Runtime Error:\n' + e.message;
-      if (e.filename) msg += '\n\nFile: ' + e.filename + ':' + e.lineno + ':' + e.colno;
-      if (e.error && e.error.stack) msg += '\n\nStack:\n' + e.error.stack.split('\n').slice(0,8).join('\n');
+      var msg = 'Runtime Error:\\n' + e.message;
+      if (e.filename) msg += '\\n\\nFile: ' + e.filename + ':' + e.lineno + ':' + e.colno;
+      if (e.error && e.error.stack) msg += '\\n\\nStack:\\n' + e.error.stack.split('\\n').slice(0,8).join('\\n');
       if (root && (!root.hasChildNodes() || root.querySelector('.artifact-error'))) {
         root.innerHTML = '<div class="artifact-error">' + msg + '</div>';
       } else {
@@ -186,7 +190,7 @@ if (_ArtifactComponent) {
         var overlay = document.createElement('div');
         overlay.className = 'artifact-error';
         overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#fef2f2;border-bottom:2px solid #dc2626;max-height:40vh;overflow:auto;font-size:12px';
-        overlay.textContent = 'Unhandled Promise Rejection:\n' + (e.reason ? e.reason.message || e.reason : 'unknown');
+        overlay.textContent = 'Unhandled Promise Rejection:\\n' + (e.reason ? e.reason.message || e.reason : 'unknown');
         document.body.prepend(overlay);
       }
     });
