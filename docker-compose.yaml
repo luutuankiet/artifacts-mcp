@@ -1,0 +1,23 @@
+services:
+  artifact-server:
+    build: .
+    container_name: artifact-server
+    restart: unless-stopped
+    environment:
+      - PORT=3333
+      - API_KEY=${API_KEY:-}
+      - BASE_URL=${BASE_URL:-https://artifacts.kenluu.org}
+    volumes:
+      - ./data/artifacts:/app/artifacts
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.artifacts.rule=Host(`artifacts.kenluu.org`)
+      - traefik.http.routers.artifacts.entrypoints=websecure
+      - traefik.http.routers.artifacts.tls.certresolver=traefik-main
+      - traefik.http.services.artifacts.loadbalancer.server.port=3333
+    networks:
+      - frontend
+
+networks:
+  frontend:
+    external: true

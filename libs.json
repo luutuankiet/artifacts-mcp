@@ -1,0 +1,20 @@
+{
+  "_comment": "CDN library manifest. Add entries here, restart server, clients see updated tool schema.",
+  "core": {
+    "react": { "version": "18.3.1", "cdn": "https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js", "global": "React" },
+    "react-dom": { "version": "18.3.1", "cdn": "https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js", "global": "ReactDOM" },
+    "babel-standalone": { "version": "7.26.0", "cdn": "https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.0/babel.min.js", "global": "Babel", "_note": "Client-side JSX compiler" }
+  },
+  "optional": {
+    "tailwindcss": { "version": "3.4.0", "cdn": "https://cdn.tailwindcss.com/3.4.0", "global": "tailwind", "type": "script" },
+    "recharts": { "version": "2.15.0", "cdn": "https://cdn.jsdelivr.net/npm/recharts@2.15.0/umd/Recharts.min.js", "global": "Recharts" },
+    "lucide-react": { "version": "0.408.0", "cdn": "https://cdn.jsdelivr.net/npm/lucide-react@0.408.0/dist/umd/lucide-react.min.js", "global": "LucideReact" },
+    "d3": { "version": "7.9.0", "cdn": "https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js", "global": "d3" },
+    "three": { "version": "0.128.0", "cdn": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js", "global": "THREE" },
+    "chart-js": { "version": "4.4.0", "cdn": "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js", "global": "Chart" },
+    "papaparse": { "version": "5.4.1", "cdn": "https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js", "global": "Papa" },
+    "mathjs": { "version": "12.4.0", "cdn": "https://cdn.jsdelivr.net/npm/mathjs@12.4.0/lib/browser/math.min.js", "global": "math" },
+    "lodash": { "version": "4.17.21", "cdn": "https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js", "global": "_" },
+    "tone": { "version": "14.7.77", "cdn": "https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js", "global": "Tone" }
+  }
+}
