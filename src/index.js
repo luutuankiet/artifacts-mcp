@@ -8,7 +8,6 @@ import { galleryHtml } from './gallery.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PORT = process.env.PORT || 3333;
-// Auth handled by Traefik basicauth - no app-level API key
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 const app = express();
@@ -31,7 +30,6 @@ app.get('/', async (req, res) => {
 
 // Gallery API endpoints (for delete actions)
 app.delete('/api/artifacts/:slug', (req, res) => {
-  // Auth handled by Traefik basicauth
   import('./storage.js').then(({ deleteArtifact }) => {
     deleteArtifact(req.params.slug)
       .then(deleted => {
@@ -42,7 +40,7 @@ app.delete('/api/artifacts/:slug', (req, res) => {
   });
 });
 
-// MCP endpoint
+// MCP endpoint (SDK-backed)
 handleMcp(app, BASE_URL);
 
 app.listen(PORT, '0.0.0.0', () => {
@@ -50,5 +48,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  Gallery:   ${BASE_URL}/`);
   console.log(`  Artifacts: ${BASE_URL}/artifacts/`);
   console.log(`  MCP:       ${BASE_URL}/mcp`);
-  console.log(`  Auth:      Traefik basicauth`);  
+  console.log(`  Auth:      Traefik basicauth`);
 });

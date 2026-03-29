@@ -27,20 +27,25 @@ export function getAvailableLibraries() {
   return result;
 }
 
-export function buildJsxHtml(source, title, libraries = []) {
+/**
+ * Build an HTML page from server-compiled JavaScript.
+ * The JS has already been transformed by esbuild (JSX -> React.createElement,
+ * imports -> require()), so NO Babel is needed in the browser.
+ *
+ * @param {string} compiledJs  esbuild-compiled JavaScript (with require() calls)
+ * @param {string} title       Page title
+ * @param {string[]} libraries Optional CDN library names
+ * @returns {string} Complete HTML document
+ */
+export function buildHtml(compiledJs, title, libraries = []) {
   const libs = getLibs();
 
-  // Always include core libs
+  // Core libs: React + ReactDOM (NO Babel)
   const scripts = [];
-
-  // React + ReactDOM
   scripts.push(`<script crossorigin src="${libs.core.react.cdn}"></script>`);
   scripts.push(`<script crossorigin src="${libs.core['react-dom'].cdn}"></script>`);
 
-  // Babel standalone for client-side JSX compilation
-  scripts.push(`<script src="${libs.core['babel-standalone'].cdn}"></script>`);
-
-  // Tailwind CDN — always include (most artifacts use it)
+  // Tailwind CDN — always include
   const tw = libs.optional.tailwindcss;
   scripts.push(`<script src="${tw.cdn}"></script>`);
 
@@ -52,26 +57,31 @@ export function buildJsxHtml(source, title, libraries = []) {
     }
   }
 
-  // Build require shim from libs manifest so import statements work
-  // Babel standalone compiles `import X from 'y'` → `require('y')`
-  // Without this shim, require() is undefined → ReferenceError → raw source leaks into DOM
+  // Build require() shim — maps module names to CDN window globals
+  // esbuild output uses require() calls (converted from ESM imports)
   const requireMap = {};
-  // Core libs
   for (const [name, info] of Object.entries(libs.core)) {
     if (info.global) requireMap[name] = info.global;
   }
-  // Add react-dom/client alias (common import path)
   requireMap['react-dom/client'] = 'ReactDOM';
-  // Optional libs (all of them, not just requested — harmless to map extras)
   for (const [name, info] of Object.entries(libs.optional)) {
     if (info.global) requireMap[name] = info.global;
   }
 
-  const requireShim = `<script>\n// Module shim: Babel compiles import→require(), this maps to CDN globals\nwindow.require = function(name) {\n  const map = ${JSON.stringify(requireMap)};\n  const g = map[name];\n  if (g && window[g]) return window[g];\n  console.warn('require("' + name + '"): no CDN global mapped');\n  return {};\n};\nwindow.exports = {}; window.module = { exports: {} };\n</script>`;
+  const requireShim = `<script>
+// Module shim: esbuild-compiled code uses require(), this maps to CDN globals
+window.require = function(name) {
+  const map = ${JSON.stringify(requireMap)};
+  const g = map[name];
+  if (g && window[g]) return window[g];
+  console.warn('require("' + name + '"): no CDN global mapped');
+  return {};
+};
+window.exports = {}; window.module = { exports: {} };
+</script>`;
 
-  // Escape the source for embedding in a script tag
-  const escapedSource = source
-    .replace(/<\/script>/gi, '<\\/script>');
+  // Escape closing script tags in the compiled JS
+  const escapedJs = compiledJs.replace(/<\/script>/gi, '<\\/script>');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -89,34 +99,42 @@ export function buildJsxHtml(source, title, libraries = []) {
 </head>
 <body>
   <div id="root"></div>
-  <script type="text/babel" data-type="module">
-${source}
+  <script>
+${escapedJs}
 
-// Auto-mount: find the default export and render it
-const _ArtifactComponent = typeof App !== 'undefined' ? App 
-  : typeof default_export !== 'undefined' ? default_export 
+// Auto-mount: find the component to render
+// Priority: module.exports.default (CJS default export from esbuild)
+//           module.exports (direct CJS export)
+//           global App (common convention)
+var _ArtifactComponent = (module.exports && module.exports.default) ? module.exports.default
+  : (module.exports && typeof module.exports === 'function') ? module.exports
+  : (exports && exports.default) ? exports.default
+  : typeof App !== 'undefined' ? App
+  : typeof _default_export !== 'undefined' ? _default_export
   : null;
 
 if (_ArtifactComponent) {
-  const root = ReactDOM.createRoot(document.getElementById('root'));
+  var root = ReactDOM.createRoot(document.getElementById('root'));
   root.render(React.createElement(_ArtifactComponent));
 } else {
-  document.getElementById('root').innerHTML = 
+  document.getElementById('root').innerHTML =
     '<div class="artifact-error">Error: No App or default export found in artifact source.</div>';
 }
   </script>
   <script>
-    // Error boundary for Babel compilation failures
     window.addEventListener('error', function(e) {
-      const root = document.getElementById('root');
+      var root = document.getElementById('root');
       if (root && !root.hasChildNodes()) {
-        root.innerHTML = '<div class="artifact-error">Compilation Error:\n' + e.message + '</div>';
+        root.innerHTML = '<div class="artifact-error">Runtime Error:\n' + e.message + '</div>';
       }
     });
   </script>
 </body>
 </html>`;
 }
+
+// Keep backward compat export name
+export { buildHtml as buildJsxHtml };
 
 function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

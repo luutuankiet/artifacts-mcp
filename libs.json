@@ -3,7 +3,7 @@
   "core": {
     "react": { "version": "18.3.1", "cdn": "https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js", "global": "React" },
     "react-dom": { "version": "18.3.1", "cdn": "https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js", "global": "ReactDOM" },
-    "babel-standalone": { "version": "7.26.0", "cdn": "https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.0/babel.min.js", "global": "Babel", "_note": "Client-side JSX compiler" }
+    "_note": "babel-standalone removed — JSX is now compiled server-side by esbuild"
   },
   "optional": {
     "tailwindcss": { "version": "3.4.0", "cdn": "https://cdn.tailwindcss.com/3.4.0", "global": "tailwind", "type": "script" },
