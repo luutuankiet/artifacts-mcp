@@ -28,7 +28,31 @@ app.get('/', async (req, res) => {
   }
 });
 
-// Gallery API endpoints (for delete actions)
+// Gallery API endpoints — batch route MUST come before :slug param route
+app.delete('/api/artifacts/batch', express.json(), async (req, res) => {
+  try {
+    const { slugs } = req.body;
+    if (!Array.isArray(slugs) || slugs.length === 0) {
+      return res.status(400).json({ error: 'slugs array required' });
+    }
+    const { deleteArtifact } = await import('./storage.js');
+    let deleted = 0;
+    const errors = [];
+    for (const slug of slugs) {
+      try {
+        const ok = await deleteArtifact(slug);
+        if (ok) deleted++;
+        else errors.push(`${slug}: not found`);
+      } catch (e) {
+        errors.push(`${slug}: ${e.message}`);
+      }
+    }
+    res.json({ deleted, errors: errors.length > 0 ? errors : undefined });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/artifacts/:slug', (req, res) => {
   import('./storage.js').then(({ deleteArtifact }) => {
     deleteArtifact(req.params.slug)
@@ -39,6 +63,8 @@ app.delete('/api/artifacts/:slug', (req, res) => {
       .catch(err => res.status(500).json({ error: err.message }));
   });
 });
+
+
 
 // MCP endpoint (SDK-backed)
 handleMcp(app, BASE_URL);

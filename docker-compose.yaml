@@ -14,17 +14,12 @@ services:
       - ./libs.json:/app/libs.json
     labels:
       - traefik.enable=true
-      # HTML artifacts — public (no auth) so end users can view
-      - traefik.http.routers.artifacts.rule=Host(`artifacts.kenluu.org`) && PathPrefix(`/artifacts`)
+      # All routes behind basicauth
+      - traefik.http.routers.artifacts.rule=Host(`artifacts.kenluu.org`)
       - traefik.http.routers.artifacts.entrypoints=websecure
       - traefik.http.routers.artifacts.tls.certresolver=traefik-main
-      - traefik.http.routers.artifacts.priority=3
-      # Gallery/root — behind basicauth
-      - traefik.http.routers.artifacts-gallery.rule=Host(`artifacts.kenluu.org`)
-      - traefik.http.routers.artifacts-gallery.entrypoints=websecure
-      - traefik.http.routers.artifacts-gallery.tls.certresolver=traefik-main
-      - traefik.http.routers.artifacts-gallery.priority=1
-      - traefik.http.routers.artifacts-gallery.middlewares=artifacts-auth
+      - traefik.http.routers.artifacts.priority=1
+      - traefik.http.routers.artifacts.middlewares=artifacts-auth
       - traefik.http.services.artifacts.loadbalancer.server.port=3333
       # MCP endpoint with basicauth (for mcpproxy-go)
       - traefik.http.routers.artifacts-mcp.rule=Host(`artifacts.kenluu.org`) && PathPrefix(`/mcp`)
