@@ -140,10 +140,15 @@ const sessions = new Map();
 
 export function handleMcp(app, apiKey, baseUrl) {
   app.post('/mcp', (req, res) => {
-    // API key check for write operations
-    const providedKey = req.query.apikey || req.headers['x-api-key'];
-    if (apiKey && providedKey !== apiKey) {
-      return res.status(401).json(makeJsonRpcError(null, -32001, 'Unauthorized: invalid API key'));
+    // API key check — skip for read-only methods (initialize, tools/list, ping)
+    // This allows mcpproxy-go to connect without OAuth negotiation issues
+    const { method: rpcMethod } = req.body;
+    const readOnlyMethods = ['initialize', 'notifications/initialized', 'tools/list', 'ping'];
+    if (!readOnlyMethods.includes(rpcMethod)) {
+      const providedKey = req.query.apikey || req.headers['x-api-key'];
+      if (apiKey && providedKey !== apiKey) {
+        return res.status(401).json(makeJsonRpcError(null, -32001, 'Unauthorized: invalid API key'));
+      }
     }
 
     const { jsonrpc, id, method, params } = req.body;
