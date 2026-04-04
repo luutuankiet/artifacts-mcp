@@ -28,6 +28,28 @@ export async function saveArtifact(slug, html, meta) {
   return fullMeta;
 }
 
+/**
+ * Store raw source code alongside the artifact.
+ * Enables patch_artifact to apply surgical fixes without full retransmission.
+ */
+export async function saveSource(slug, source) {
+  const sourcePath = join(META_DIR, `${slug}.source`);
+  await writeFile(sourcePath, source, 'utf-8');
+}
+
+/**
+ * Retrieve stored source code for an artifact.
+ * @returns {string|null} Raw source or null if not found.
+ */
+export async function getSource(slug) {
+  const sourcePath = join(META_DIR, `${slug}.source`);
+  try {
+    return await readFile(sourcePath, 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
 export async function listArtifacts(baseUrl) {
   const files = await readdir(ARTIFACTS_DIR);
   const htmlFiles = files.filter(f => f.endsWith('.html'));
@@ -94,6 +116,8 @@ export async function deleteArtifact(slug) {
 
   await unlink(htmlPath);
   const metaPath = join(META_DIR, `${slug}.json`);
+  const sourcePath = join(META_DIR, `${slug}.source`);
   try { await unlink(metaPath); } catch {}
+  try { await unlink(sourcePath); } catch {}
   return true;
 }

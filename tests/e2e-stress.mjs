@@ -193,9 +193,9 @@ async function runTests() {
   await test('mcp-tools-list', async () => {
     const res = await mcpCall('tools/list');
     const tools = JSON.parse(res.body).result?.tools || [];
-    assert(tools.length === 5, `Expected 5 tools, got ${tools.length}`);
+    assert(tools.length === 7, `Expected 7 tools, got ${tools.length}`);
     const names = tools.map(t => t.name).sort();
-    assert(names.join(',') === 'delete_artifact,get_artifact,list_artifacts,publish_artifact,write_whiteboard',
+    assert(names.join(',') === 'delete_artifact,get_artifact,list_artifacts,patch_artifact,publish_artifact,validate_artifact,write_whiteboard',
       `Wrong tools: ${names}`);
   });
 

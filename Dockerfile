@@ -1,11 +1,17 @@
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app
 
-COPY package.json ./
+# Playwright needs these base deps to install Chromium
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
 
-# esbuild ships platform-specific binaries; npm install handles it on Alpine
+COPY package.json ./
 RUN npm install --production
+
+# Install Playwright Chromium + all system dependencies it needs
+# --with-deps auto-detects OS and installs correct packages
+RUN npx playwright-core install --with-deps chromium
 
 COPY libs.json ./
 COPY src/ ./src/

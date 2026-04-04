@@ -18,6 +18,11 @@ export function reloadLibs() {
   return getLibs();
 }
 
+/** Expose parsed libs.json manifest for library health checks. */
+export function getLibsManifest() {
+  return getLibs();
+}
+
 export function getAvailableLibraries() {
   const libs = getLibs();
   const result = [];

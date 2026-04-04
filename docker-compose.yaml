@@ -8,6 +8,8 @@ services:
       - BASE_URL=${BASE_URL:-https://artifacts.kenluu.org}
     ports:
       - "3333:3333"
+    # Chromium in Docker needs larger shared memory
+    shm_size: '256m'
     volumes:
       - ./artifacts:/app/artifacts
       - ./src:/app/src

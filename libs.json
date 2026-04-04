@@ -9,7 +9,23 @@
   "optional": {
     "tailwindcss": { "version": "3.4.0", "cdn": "https://cdn.tailwindcss.com/3.4.0", "global": "tailwind", "type": "script" },
     "recharts": { "version": "2.15.0", "cdn": "https://cdn.jsdelivr.net/npm/recharts@2.15.0/umd/Recharts.min.js", "global": "Recharts" },
-    "lucide-react": { "version": "0.408.0", "cdn": "https://cdn.jsdelivr.net/npm/lucide-react@0.408.0/dist/umd/lucide-react.min.js", "global": "LucideReact" },
+    "lucide-react": {
+      "version": "0.408.0",
+      "cdn": "https://cdn.jsdelivr.net/npm/lucide-react@0.408.0/dist/umd/lucide-react.min.js",
+      "global": "LucideReact",
+      "health": {
+        "status": "broken",
+        "reason": "UMD bundle calls React.forwardRef at evaluation time before React global is accessible to the UMD factory. Fails with: TypeError Cannot read properties of undefined (reading forwardRef)",
+        "workaround": "Use inline SVG components instead of lucide-react icons. Example: const Icon = ({size=16, ...p}) => <svg width={size} height={size} viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2} {...p}>...</svg>",
+        "alternative": "lucide"
+      }
+    },
+    "lucide": {
+      "version": "0.408.0",
+      "cdn": "https://cdn.jsdelivr.net/npm/lucide@0.408.0/dist/umd/lucide.min.js",
+      "global": "lucide",
+      "_note": "Vanilla JS icon library — no React dependency. Use lucide.createElement('icon-name') or DOM manipulation."
+    },
     "d3": { "version": "7.9.0", "cdn": "https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js", "global": "d3" },
     "three": { "version": "0.128.0", "cdn": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js", "global": "THREE" },
     "chart-js": { "version": "4.4.0", "cdn": "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js", "global": "Chart" },
