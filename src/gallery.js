@@ -230,9 +230,16 @@ export function galleryHtml(artifacts, baseUrl) {
     const openTabs = new Map(); // slug -> { slug, title, url }
     let activeSlug = null;
 
+    function findItem(slug) {
+      // Plain iteration avoids querySelector escaping for slugs with special chars
+      const items = document.querySelectorAll('.art-item');
+      for (const it of items) if (it.dataset.slug === slug) return it;
+      return null;
+    }
+
     function openArtifact(slug) {
-      const item = document.querySelector('.art-item[data-slug="' + cssEscape(slug) + '"]');
-      if (!item) return;
+      const item = findItem(slug);
+      if (!item) { console.warn('openArtifact: no item for slug', slug); return; }
       const title = item.dataset.title;
       const url = item.dataset.url;
       if (!openTabs.has(slug)) {
@@ -418,10 +425,7 @@ export function galleryHtml(artifacts, baseUrl) {
       document.getElementById('sidebar').classList.toggle('open');
     }
 
-    function cssEscape(s) {
-      // Minimal escape for use inside [data-slug="..."] selectors
-      return String(s).replace(/["\\]/g, '\\\\$&');
-    }
+    // (cssEscape removed — findItem iterates instead)
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (ev) => {
