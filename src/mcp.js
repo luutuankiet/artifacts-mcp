@@ -2,8 +2,8 @@ import { randomUUID } from 'crypto';
 import { compileJsx, detectLibraries } from './compiler.js';
 import { buildHtml, getAvailableLibraries, getLibsManifest } from './template.js';
 import { saveArtifact, listArtifacts, getArtifact, deleteArtifact, saveSource, getSource } from './storage.js';
-import { broadcastWhiteboard } from './whiteboard.js';
-import { validateArtifact, checkLibraryHealth } from './validator.js';
+import { broadcastWhiteboard, persistWhiteboard, autoDetectWhiteboardFormat } from './whiteboard.js';
+import { validateArtifact, validateWhiteboard, checkLibraryHealth } from './validator.js';
 
 // Validation always uses internal URL (bypasses Traefik auth)
 const INTERNAL_URL = `http://localhost:${process.env.PORT || 3333}`;
@@ -109,19 +109,63 @@ function getToolDefinitions() {
     {
       name: 'write_whiteboard',
       description: [
-        'Push SVG or HTML to the live whiteboard. Content renders instantly in any connected browser \u2014 zero compilation, zero page reload.',
-        'Best for: diagrams, flowcharts, architecture visuals, data visualizations, any visual explanation.',
-        'The user opens /whiteboard in a browser tab once. Every call to this tool updates that tab instantly via SSE.',
-        'For SVG: write complete <svg> markup. For HTML: write any HTML fragment (inline styles, inline SVG, etc).',
-        'History is preserved \u2014 the user can click back to previous whiteboard states.',
+        'Publish a visual artifact — SVG, Mermaid diagram, or HTML fragment. The single fastest path from prompt to a live browsable visualization.',
+        '',
+        'WHY USE THIS over publish_artifact:',
+        '- 10-100x faster: zero compile, zero CDN React stack, sub-second render',
+        '- Token-efficient: a 50-token mermaid diagram encodes what 500 tokens of SVG would',
+        '- Auto-validation: viewer is loaded headless; SVG parser / mermaid render verified before URL is returned',
+        '- Persisted by default: appears in the gallery alongside JSX artifacts, gets a stable shareable URL',
+        '- Live broadcast: still pushes to /whiteboard SSE so a connected browser tab updates instantly',
+        '',
+        'FORMATS (auto-detected from content if format not specified):',
+        '- mermaid : preferred for flowcharts, sequence, class, ER, gantt, mindmap, etc. Just write the diagram source (e.g. "graph TD\n  A-->B"). Renders client-side via mermaid.js CDN.',
+        '- svg     : write complete <svg>...</svg> markup with viewBox. Renders directly.',
+        '- html    : any HTML fragment. Use when SVG/mermaid don\u2019t fit (e.g. styled cards, tables).',
+        '',
+        'OUTPUT: { url, whiteboard_url, slug, validated, validation_ms }. The url is the permanent gallery viewer; whiteboard_url is the live SSE page.',
+        '',
+        'ERROR RECOVERY: if validation fails, the source is still stored — use patch_whiteboard to apply a small text fix without resending the full source.',
+        '',
+        'IDEAL FOR: explaining a concept, mocking a UI / slide layout, drawing an architecture, plotting a chart, any "show me" prompt.',
       ].join('\n'),
       inputSchema: {
         type: 'object',
         required: ['content', 'title'],
         properties: {
-          content: { type: 'string', description: 'SVG markup (starting with <svg) or HTML fragment to render' },
-          title: { type: 'string', description: 'Short title for this whiteboard update (shown in history bar)' },
-          format: { type: 'string', enum: ['svg', 'html'], default: 'svg', description: 'Content format. Auto-detected from content if omitted.' },
+          content: { type: 'string', description: 'Mermaid source (e.g. "graph TD\n  A-->B"), complete <svg> markup, or HTML fragment.' },
+          title: { type: 'string', description: 'Human-readable title shown in the gallery and live whiteboard history.' },
+          format: { type: 'string', enum: ['svg', 'mermaid', 'html'], description: 'Optional. Auto-detected: <svg starts svg; mermaid keyword (graph/flowchart/sequenceDiagram/etc) starts mermaid; otherwise html.' },
+          slug: { type: 'string', description: 'Optional URL slug for stable updates. Auto-generated as YYYY-MM-DD-<title> if omitted.' },
+          description: { type: 'string', description: 'Optional description shown in gallery.' },
+          persist: { type: 'boolean', default: true, description: 'Save to gallery (default true). Set false for ephemeral broadcast-only updates.' },
+        },
+      },
+    },
+    {
+      name: 'patch_whiteboard',
+      description: [
+        'Apply surgical patches to a previously published whiteboard without resending the full source.',
+        'Use this when write_whiteboard returns a validation error — the original source is stored,',
+        'so you can fix the broken line(s) cheaply.',
+      ].join('\n'),
+      inputSchema: {
+        type: 'object',
+        required: ['slug', 'patches'],
+        properties: {
+          slug: { type: 'string', description: 'Whiteboard slug from the original write_whiteboard response.' },
+          patches: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['search', 'replace'],
+              properties: {
+                search: { type: 'string', description: 'Exact text to find in the stored source.' },
+                replace: { type: 'string', description: 'Replacement text.' },
+              },
+            },
+            description: 'Array of search-and-replace patches applied sequentially.',
+          },
         },
       },
     },
@@ -200,6 +244,24 @@ async function handleToolCall(name, args, baseUrl) {
         sourceSize: Buffer.byteLength(source, 'utf-8'),
       });
       await saveSource(slug, source);
+
+      // HTML passthrough skips validation — user-provided complete pages
+      // don't necessarily mount a React component into #root.
+      if (format === 'html') {
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              url: `${baseUrl}/artifacts/${slug}.html`,
+              title, slug, format,
+              size_kb: Math.round(meta.htmlSize / 1024),
+              created: meta.created,
+              validated: false,
+              validation_skipped: 'html_passthrough',
+            }, null, 2),
+          }],
+        };
+      }
 
       // Validation gate: headless Chromium render check
       // Uses internal URL to bypass Traefik auth
@@ -400,21 +462,186 @@ async function handleToolCall(name, args, baseUrl) {
     }
 
     case 'write_whiteboard': {
-      const { content, title } = args;
+      const { content, title, description = '' } = args;
+      const persist = args.persist !== false; // default true
       if (!content || !content.trim()) {
-        return { content: [{ type: 'text', text: 'Error: content is empty. Provide SVG or HTML markup.' }], isError: true };
+        return { content: [{ type: 'text', text: 'Error: content is empty. Provide SVG, mermaid, or HTML markup.' }], isError: true };
       }
-      const format = args.format || (content.trimStart().startsWith('<svg') ? 'svg' : 'html');
+      const format = args.format || autoDetectWhiteboardFormat(content);
+      const datePrefix = new Date().toISOString().slice(0, 10);
+      const slug = args.slug || `${datePrefix}-${slugify(title)}`;
+
+      // Live broadcast first — always fires, even when persist=false
       const clientCount = broadcastWhiteboard(content, title, format);
+
+      // Ephemeral path: skip persistence, return broadcast-only summary
+      if (!persist) {
+        console.log(`[whiteboard] ephemeral push title="${title}" format=${format} clients=${clientCount}`);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              whiteboard_url: `${baseUrl}/whiteboard`,
+              persisted: false,
+              title, format,
+              content_size_bytes: Buffer.byteLength(content, 'utf-8'),
+              clients_updated: clientCount,
+            }, null, 2),
+          }],
+        };
+      }
+
+      // Persistence path
+      console.log(`[whiteboard] persist slug=${slug} format=${format} size=${Buffer.byteLength(content)}B`);
+      let viewerUrl, meta;
+      try {
+        ({ viewerUrl, meta } = await persistWhiteboard({
+          slug, source: content, title, format, description, baseUrl,
+        }));
+      } catch (err) {
+        console.error(`[whiteboard] persist failed for slug=${slug}:`, err);
+        return {
+          content: [{ type: 'text', text: `Error: failed to persist whiteboard: ${err.message}` }],
+          isError: true,
+        };
+      }
+
+      // Validation gate — same flow as publish_artifact
+      let validation;
+      try {
+        validation = await validateWhiteboard(slug, format, INTERNAL_URL);
+      } catch (valErr) {
+        console.error(`[whiteboard] validation crashed for slug=${slug}:`, valErr.message);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              url: viewerUrl,
+              whiteboard_url: `${baseUrl}/whiteboard`,
+              slug, title, format,
+              persisted: true, validated: false,
+              validation_error: `Validator crashed: ${valErr.message}`,
+              clients_updated: clientCount,
+            }, null, 2),
+          }],
+        };
+      }
+
+      if (!validation.ok) {
+        console.log(`[whiteboard] VALIDATION FAILED slug=${slug} errors=${JSON.stringify(validation.errors)}`);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              error: 'validation_failed',
+              url: viewerUrl,
+              whiteboard_url: `${baseUrl}/whiteboard`,
+              slug, title, format,
+              validation_errors: validation.errors,
+              console_errors: validation.consoleErrors,
+              source_stored: true,
+              message: 'Whiteboard saved but failed render validation. Use patch_whiteboard to fix without resending full source.',
+              hint: buildWhiteboardHint(validation, format),
+            }, null, 2),
+          }],
+          isError: true,
+        };
+      }
+
+      console.log(`[whiteboard] VALIDATED slug=${slug} in ${validation.elapsed_ms}ms`);
       return {
         content: [{
           type: 'text',
           text: JSON.stringify({
+            url: viewerUrl,
             whiteboard_url: `${baseUrl}/whiteboard`,
-            title,
-            format,
+            slug, title, format,
+            persisted: true, validated: true,
+            validation_ms: validation.elapsed_ms,
+            size_kb: Math.round(meta.htmlSize / 1024),
             content_size_bytes: Buffer.byteLength(content, 'utf-8'),
             clients_updated: clientCount,
+          }, null, 2),
+        }],
+      };
+    }
+
+    case 'patch_whiteboard': {
+      const { slug, patches } = args;
+      if (!slug || !patches || patches.length === 0) {
+        return { content: [{ type: 'text', text: 'Error: slug and patches[] are required.' }], isError: true };
+      }
+      const storedSource = await getSource(slug);
+      if (!storedSource) {
+        return { content: [{ type: 'text', text: `No stored source for whiteboard "${slug}".` }], isError: true };
+      }
+
+      let patched = storedSource;
+      const applied = [];
+      const failed = [];
+      for (const patch of patches) {
+        if (patched.includes(patch.search)) {
+          patched = patched.replace(patch.search, patch.replace);
+          applied.push(patch.search.slice(0, 80));
+        } else {
+          failed.push({ search: patch.search.slice(0, 80), reason: 'Text not found in source' });
+        }
+      }
+
+      if (failed.length > 0 && applied.length === 0) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ error: 'no_patches_applied', failed }, null, 2) }],
+          isError: true,
+        };
+      }
+
+      const existing = await getArtifact(slug, baseUrl);
+      if (!existing || existing.type !== 'whiteboard') {
+        return { content: [{ type: 'text', text: `Slug "${slug}" is not a whiteboard — use patch_artifact instead.` }], isError: true };
+      }
+      const title = existing.title || slug;
+      const format = existing.whiteboardFormat || 'html';
+      const description = existing.description || '';
+
+      const { viewerUrl, meta } = await persistWhiteboard({
+        slug, source: patched, title, format, description, baseUrl,
+      });
+
+      // Re-broadcast the patched content live
+      broadcastWhiteboard(patched, title, format);
+
+      const validation = await validateWhiteboard(slug, format, INTERNAL_URL);
+      if (!validation.ok) {
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              error: 'validation_failed_after_patch',
+              url: viewerUrl,
+              slug, title, format,
+              patches_applied: applied,
+              patches_failed: failed,
+              validation_errors: validation.errors,
+              console_errors: validation.consoleErrors,
+              source_stored: true,
+              hint: buildWhiteboardHint(validation, format),
+            }, null, 2),
+          }],
+          isError: true,
+        };
+      }
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            url: viewerUrl,
+            slug, title, format,
+            patches_applied: applied,
+            patches_failed: failed,
+            validated: true,
+            validation_ms: validation.elapsed_ms,
+            size_kb: Math.round(meta.htmlSize / 1024),
           }, null, 2),
         }],
       };
@@ -429,6 +656,33 @@ async function handleToolCall(name, args, baseUrl) {
  * Build a human/LLM-readable hint from validation results.
  * Designed to give MCP clients (AI agents) actionable guidance.
  */
+/**
+ * Format-specific hint builder for whiteboard validation failures.
+ * Returns short, actionable guidance for agents.
+ */
+function buildWhiteboardHint(validation, format) {
+  const hints = [];
+  for (const err of validation.errors || []) {
+    if (err.type === 'mermaid') {
+      hints.push(`Mermaid syntax error: ${err.message}. Common fixes: check node IDs are alphanumeric, arrows use --> not ->, edge labels wrapped in |...|.`);
+    } else if (err.type === 'svg-parse') {
+      hints.push(`SVG parser error: ${err.message}. Common fixes: ensure root <svg xmlns="http://www.w3.org/2000/svg" viewBox="...">, close all tags, escape & as &amp;.`);
+    } else if (err.type === 'svg-empty') {
+      hints.push('No <svg> root found. Make sure your content begins with <svg ...> and contains visible elements.');
+    } else if (err.type === 'pageerror') {
+      hints.push(`Runtime error: ${err.message.slice(0, 200)}`);
+    } else if (err.type === 'dom') {
+      hints.push(err.message);
+    } else {
+      hints.push(`${err.type}: ${err.message?.slice(0, 200)}`);
+    }
+  }
+  if (format === 'mermaid' && hints.length === 0) {
+    hints.push('Mermaid render failed without a specific error. Verify the diagram type keyword (graph TD, flowchart LR, sequenceDiagram, etc) is the FIRST non-whitespace token.');
+  }
+  return hints.length > 0 ? hints.join(' | ') : 'Whiteboard render failed — check errors array for details.';
+}
+
 function buildErrorHint(validation) {
   const hints = [];
 
@@ -479,7 +733,7 @@ export function handleMcp(app, baseUrl) {
           return res.json(jsonRpcOk(id, {
             protocolVersion: PROTOCOL_VERSION,
             capabilities: { tools: { listChanged: false } },
-            serverInfo: { name: 'artifact-server', version: '2.1.0' },
+            serverInfo: { name: 'artifact-server', version: '2.2.0' },
           }));
         }
 

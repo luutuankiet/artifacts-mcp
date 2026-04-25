@@ -77,10 +77,12 @@ async function publishArtifact(args) {
   const result = JSON.parse(res.body);
   if (result.error) throw new Error(`MCP error: ${result.error.message}`);
   const content = result.result?.content?.[0];
+  // Check isError BEFORE returning text content — otherwise compile errors
+  // get silently swallowed as { raw: "Error: ..." } and never throw.
+  if (result.result?.isError) throw new Error(`Tool error: ${content?.text || 'unknown'}`);
   if (content?.type === 'text') {
     try { return JSON.parse(content.text); } catch { return { raw: content.text }; }
   }
-  if (result.result?.isError) throw new Error(`Tool error: ${content?.text || 'unknown'}`);
   return result.result;
 }
 
@@ -193,9 +195,9 @@ async function runTests() {
   await test('mcp-tools-list', async () => {
     const res = await mcpCall('tools/list');
     const tools = JSON.parse(res.body).result?.tools || [];
-    assert(tools.length === 7, `Expected 7 tools, got ${tools.length}`);
+    assert(tools.length === 8, `Expected 8 tools, got ${tools.length}`);
     const names = tools.map(t => t.name).sort();
-    assert(names.join(',') === 'delete_artifact,get_artifact,list_artifacts,patch_artifact,publish_artifact,validate_artifact,write_whiteboard',
+    assert(names.join(',') === 'delete_artifact,get_artifact,list_artifacts,patch_artifact,patch_whiteboard,publish_artifact,validate_artifact,write_whiteboard',
       `Wrong tools: ${names}`);
   });
 

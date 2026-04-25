@@ -1,10 +1,36 @@
+function typeBadgeFor(a) {
+  if (a.type === 'whiteboard') {
+    const wf = a.whiteboardFormat || 'html';
+    const label = wf === 'svg' ? 'SVG' : wf === 'mermaid' ? 'Mermaid' : 'HTML fragment';
+    const cls = wf === 'svg' ? 'wb-svg' : wf === 'mermaid' ? 'wb-mermaid' : 'wb-html';
+    return { label, cls, kind: 'whiteboard' };
+  }
+  const fmt = (a.format || '').toLowerCase();
+  if (fmt === 'jsx') return { label: 'JSX', cls: 'art-jsx', kind: 'artifact' };
+  if (fmt === 'html') return { label: 'HTML', cls: 'art-html', kind: 'artifact' };
+  return { label: fmt || 'unknown', cls: 'art-other', kind: 'artifact' };
+}
+
 export function galleryHtml(artifacts, baseUrl) {
-  const rows = artifacts.map(a => `
-    <tr data-slug="${esc(a.slug)}">
+  // Filter chip counts
+  const counts = { all: artifacts.length, artifact: 0, whiteboard: 0, jsx: 0, svg: 0, mermaid: 0 };
+  for (const a of artifacts) {
+    const b = typeBadgeFor(a);
+    counts[b.kind] = (counts[b.kind] || 0) + 1;
+    if (a.type !== 'whiteboard' && (a.format||'').toLowerCase() === 'jsx') counts.jsx++;
+    if (a.whiteboardFormat === 'svg') counts.svg++;
+    if (a.whiteboardFormat === 'mermaid') counts.mermaid++;
+  }
+
+  const rows = artifacts.map(a => {
+    const badge = typeBadgeFor(a);
+    const filterTag = a.type === 'whiteboard' ? `wb-${a.whiteboardFormat || 'html'}` : `art-${(a.format||'unknown').toLowerCase()}`;
+    return `
+    <tr data-slug="${esc(a.slug)}" data-kind="${badge.kind}" data-filter="${filterTag}">
       <td class="checkbox-col"><input type="checkbox" class="artifact-cb" value="${esc(a.slug)}" /></td>
       <td><a href="${a.url}" target="_blank">${esc(a.title)}</a></td>
       <td><code>${esc(a.slug)}</code></td>
-      <td>${esc(a.format)}</td>
+      <td><span class="type-badge ${badge.cls}">${badge.label}</span></td>
       <td>${a.size_kb} KB</td>
       <td>${new Date(a.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
       <td>
@@ -12,7 +38,8 @@ export function galleryHtml(artifacts, baseUrl) {
         <a href="${a.url}" download="${esc(a.slug)}.html" class="btn btn-download">Download</a>
         <button class="btn btn-delete" onclick="deleteArtifact('${esc(a.slug)}')">Delete</button>
       </td>
-    </tr>`).join('\n');
+    </tr>`;
+  }).join('\n');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -49,6 +76,20 @@ export function galleryHtml(artifacts, baseUrl) {
     .btn-bulk-delete { background: #991b1b; color: #fca5a5; padding: 0.4rem 1rem; font-size: 0.85rem; }
     .btn-bulk-delete:hover { background: #b91c1c; }
     .empty { text-align: center; padding: 3rem; color: #64748b; }
+    .type-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
+    .art-jsx     { background: #1e3a5f; color: #93c5fd; }
+    .art-html    { background: #3a3a1e; color: #fde68a; }
+    .art-other   { background: #334155; color: #cbd5e1; }
+    .wb-svg      { background: #1e3a2f; color: #86efac; }
+    .wb-mermaid  { background: #3a1e3a; color: #f0abfc; }
+    .wb-html     { background: #3a2a1e; color: #fdba74; }
+    .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; padding: 0.5rem 0 1rem; align-items: center; }
+    .filter-bar .label { color: #64748b; font-size: 0.8rem; margin-right: 6px; }
+    .filter-chip { padding: 4px 10px; background: #1a1f2e; border: 1px solid #334155; color: #94a3b8; border-radius: 4px; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+    .filter-chip:hover { border-color: #475569; color: #cbd5e1; }
+    .filter-chip.active { border-color: #3b82f6; color: #3b82f6; background: #0f1729; }
+    .filter-chip .chip-count { color: #64748b; margin-left: 4px; }
+    .filter-chip.active .chip-count { color: #60a5fa; }
     .toast { position: fixed; bottom: 1rem; right: 1rem; background: #065f46; color: #d1fae5; padding: 0.75rem 1.25rem; border-radius: 6px; display: none; font-size: 0.9rem; z-index: 100; }
     @media (max-width: 768px) {
       table, thead, tbody, th, td, tr { display: block; }
@@ -64,7 +105,15 @@ export function galleryHtml(artifacts, baseUrl) {
     <h1>Artifact Gallery</h1>
     <span class="count">${artifacts.length} artifact${artifacts.length !== 1 ? 's' : ''}</span>
   </div>
-  ${artifacts.length === 0 ? '<div class="empty">No artifacts yet. Publish one via the MCP endpoint.</div>' : `
+  ${artifacts.length === 0 ? '<div class="empty">No artifacts yet. Publish one via <code>publish_artifact</code> or <code>write_whiteboard</code>.</div>' : `
+  <div class="filter-bar">
+    <span class="label">Filter:</span>
+    <button class="filter-chip active" data-filter="*" onclick="setFilter(this)">All<span class="chip-count">${counts.all}</span></button>
+    <button class="filter-chip" data-filter="kind:artifact" onclick="setFilter(this)">Artifacts<span class="chip-count">${counts.artifact}</span></button>
+    <button class="filter-chip" data-filter="kind:whiteboard" onclick="setFilter(this)">Whiteboards<span class="chip-count">${counts.whiteboard}</span></button>
+    <button class="filter-chip" data-filter="f:wb-svg" onclick="setFilter(this)">SVG<span class="chip-count">${counts.svg}</span></button>
+    <button class="filter-chip" data-filter="f:wb-mermaid" onclick="setFilter(this)">Mermaid<span class="chip-count">${counts.mermaid}</span></button>
+  </div>
   <div class="bulk-actions" id="bulkActions">
     <span class="selected-count" id="selectedCount">0 selected</span>
     <button class="btn btn-bulk-delete" onclick="deleteSelected()">Delete Selected</button>
@@ -152,6 +201,21 @@ export function galleryHtml(artifacts, baseUrl) {
       } catch(e) {
         showToast('Error: ' + e.message, true);
       }
+    }
+    function setFilter(btn) {
+      var f = btn.getAttribute('data-filter');
+      document.querySelectorAll('.filter-chip').forEach(function(c){ c.classList.toggle('active', c === btn); });
+      var rows = document.querySelectorAll('#artifactList tr');
+      rows.forEach(function(tr){
+        if (f === '*') { tr.style.display = ''; return; }
+        if (f.startsWith('kind:')) {
+          var k = f.slice(5);
+          tr.style.display = tr.getAttribute('data-kind') === k ? '' : 'none';
+        } else if (f.startsWith('f:')) {
+          var t = f.slice(2);
+          tr.style.display = tr.getAttribute('data-filter') === t ? '' : 'none';
+        }
+      });
     }
     function showToast(msg, isError) {
       var t = document.getElementById('toast');

@@ -32,6 +32,13 @@
     "papaparse": { "version": "5.4.1", "cdn": "https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js", "global": "Papa" },
     "mathjs": { "version": "12.4.0", "cdn": "https://cdn.jsdelivr.net/npm/mathjs@12.4.0/lib/browser/math.min.js", "global": "math" },
     "lodash": { "version": "4.17.21", "cdn": "https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js", "global": "_" },
-    "tone": { "version": "14.7.77", "cdn": "https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js", "global": "Tone" }
+    "tone": { "version": "14.7.77", "cdn": "https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js", "global": "Tone" },
+    "mermaid": {
+      "version": "11.4.0",
+      "cdn": "https://cdn.jsdelivr.net/npm/mermaid@11.4.0/dist/mermaid.min.js",
+      "global": "mermaid",
+      "type": "script",
+      "_note": "Loaded by whiteboard mermaid viewer template only — not auto-detected for publish_artifact"
+    }
   }
 }

@@ -183,3 +183,95 @@ export async function closeBrowser() {
     browser = null;
   }
 }
+
+/**
+ * Validate a persisted whiteboard by loading its viewer page in headless Chromium.
+ *
+ * Checks differ by format:
+ *   - svg     : #wb-render must contain an <svg> with content; no [data-wb-error]
+ *   - mermaid : after settle, the mermaid pre is replaced with an <svg>; reject [data-mermaid-error]
+ *   - html    : #wb-render must have children; no [data-wb-error]
+ *
+ * Mermaid gets a longer settle window because the CDN script must download + render.
+ */
+export async function validateWhiteboard(slug, format, baseUrl, opts = {}) {
+  const { timeout = 15000, settleMs = format === 'mermaid' ? 2500 : 600 } = opts;
+  const url = `${baseUrl}/artifacts/${slug}.html`;
+  const t0 = Date.now();
+
+  const brow = await getBrowser();
+  const context = await brow.newContext();
+  const page = await context.newPage();
+
+  const errors = [];
+  const consoleErrors = [];
+
+  page.on('pageerror', err => {
+    errors.push({ type: 'pageerror', message: err.message, location: extractLocation(err.stack) });
+  });
+
+  page.on('console', msg => {
+    if (msg.type() === 'error') {
+      const text = msg.text();
+      if (!text.includes('cloudflareinsights') &&
+          !text.includes('favicon.ico') &&
+          !text.includes('sha512') &&
+          !text.includes('Same Origin Policy')) {
+        consoleErrors.push(text);
+      }
+    }
+  });
+
+  try {
+    const response = await page.goto(url, { waitUntil: 'networkidle', timeout });
+    if (!response || response.status() !== 200) {
+      errors.push({ type: 'http', message: `HTTP ${response ? response.status() : 'null'}` });
+    }
+
+    await page.waitForTimeout(settleMs);
+
+    const state = await page.evaluate(() => {
+      const host = document.getElementById('wb-render');
+      const inner = document.querySelector('.canvas-inner');
+      const wbErr = document.querySelector('[data-wb-error]');
+      const mErr = document.querySelector('[data-mermaid-error]');
+      const svg = inner ? inner.querySelector('svg') : null;
+      return {
+        hostExists: !!host,
+        hostHasChildren: host ? host.hasChildNodes() : false,
+        hostInnerLen: host ? host.innerHTML.length : 0,
+        innerHasSvg: !!svg,
+        wbError: wbErr ? wbErr.textContent.slice(0, 500) : null,
+        mermaidError: mErr ? mErr.textContent.slice(0, 500) : null,
+      };
+    });
+
+    if (state.wbError) {
+      const isEmptySvg = /No <svg> element/.test(state.wbError);
+      errors.push({ type: isEmptySvg ? 'svg-empty' : 'svg-parse', message: state.wbError });
+    }
+    if (state.mermaidError) {
+      errors.push({ type: 'mermaid', message: state.mermaidError });
+    }
+
+    if (format === 'svg' || format === 'html') {
+      if (!state.hostExists) errors.push({ type: 'dom', message: '#wb-render not found' });
+      else if (!state.hostHasChildren) errors.push({ type: 'dom', message: 'Whiteboard rendered empty (no children in #wb-render)' });
+    } else if (format === 'mermaid') {
+      // After mermaid.run replaces the <pre>, we expect an SVG inside .canvas-inner
+      if (!state.innerHasSvg && !state.mermaidError) {
+        errors.push({ type: 'mermaid', message: 'Mermaid did not produce an <svg> output — likely a syntax error before init.' });
+      }
+    }
+
+    const elapsed = Date.now() - t0;
+    const ok = errors.length === 0;
+    console.log(`[validate-wb] slug=${slug} format=${format} ok=${ok} elapsed=${elapsed}ms errors=${errors.length}`);
+    return { ok, slug, format, elapsed_ms: elapsed, errors, consoleErrors, state };
+  } catch (err) {
+    errors.push({ type: 'crash', message: err.message });
+    return { ok: false, slug, format, elapsed_ms: Date.now() - t0, errors, consoleErrors, state: null };
+  } finally {
+    await context.close();
+  }
+}

@@ -1,12 +1,22 @@
 /**
- * Whiteboard — instant SVG/HTML rendering via SSE push.
+ * Whiteboard — first-class persistent visual artifacts.
  *
  * Architecture:
- *   1. Browser opens GET /whiteboard → static page with SSE listener
- *   2. Browser connects GET /whiteboard/events → SSE stream
- *   3. Claude calls write_whiteboard MCP tool → server pushes to all SSE clients
- *   4. Browser renders raw SVG/HTML instantly — zero compilation
+ *   1. Persistence: write_whiteboard saves source + viewer HTML to artifacts/<slug>.html
+ *      so it shows up in the gallery and gets a stable URL.
+ *   2. Live broadcast: still pushes to /whiteboard SSE clients for real-time render.
+ *   3. Validation: viewer is loaded headless; SVG parser / mermaid render checked.
+ *   4. Patch flow: source stored in .meta/<slug>.source so patch_whiteboard works.
+ *
+ * Three formats are first-class: svg | mermaid | html. Mermaid is the most
+ * token-efficient choice for diagrams — 50 tokens of mermaid encodes what
+ * 500 tokens of SVG would.
  */
+
+import { saveArtifact, saveSource } from './storage.js';
+import { buildWhiteboardViewer, autoDetectWhiteboardFormat } from './whiteboard-template.js';
+
+export { autoDetectWhiteboardFormat };
 
 // ── SSE Client Registry ────────────────────────────────────────────────
 const sseClients = new Set();
@@ -31,6 +41,35 @@ export function broadcastWhiteboard(content, title, format) {
   }
   console.log(`[whiteboard] broadcast to ${sent} clients (${format}, ${Buffer.byteLength(content)}B)`);
   return sent;
+}
+
+/**
+ * Persist a whiteboard as a first-class artifact.
+ * Writes the viewer HTML, metadata, and raw source so the whiteboard appears
+ * in the gallery, has a stable URL, and supports patch_whiteboard.
+ *
+ * @param {object} args
+ * @param {string} args.slug              Stable filename slug
+ * @param {string} args.source            Raw whiteboard source (svg/mermaid/html)
+ * @param {string} args.title             Human-readable title
+ * @param {string} args.format            'svg' | 'mermaid' | 'html'
+ * @param {string} args.description       Optional description for gallery
+ * @param {string} args.baseUrl           Public base URL
+ * @returns {Promise<{html: string, meta: object, viewerUrl: string}>}
+ */
+export async function persistWhiteboard({ slug, source, title, format, description = '', baseUrl }) {
+  const html = buildWhiteboardViewer({ source, title, slug, format, baseUrl });
+  const meta = await saveArtifact(slug, html, {
+    title,
+    description,
+    type: 'whiteboard',
+    format: 'whiteboard',
+    whiteboardFormat: format,
+    libraries: format === 'mermaid' ? ['mermaid'] : [],
+    sourceSize: Buffer.byteLength(source, 'utf-8'),
+  });
+  await saveSource(slug, source);
+  return { html, meta, viewerUrl: `${baseUrl}/artifacts/${slug}.html` };
 }
 
 /**
@@ -138,6 +177,7 @@ function whiteboardPageHtml(baseUrl) {
     }
     .empty-state h2 { font-size: 24px; margin-bottom: 8px; color: #555; }
     .empty-state p { font-size: 14px; line-height: 1.6; }
+    .empty-state .hint { margin-top: 16px; padding: 10px 16px; background: #1a1a1a; border-left: 2px solid #3b82f6; color: #94a3b8; font-size: 13px; text-align: left; max-width: 420px; }
     .empty-state code {
       background: #1a1a1a;
       padding: 2px 6px;
@@ -202,8 +242,9 @@ function whiteboardPageHtml(baseUrl) {
 </head>
 <body>
   <header>
-    <h1><span>Whiteboard</span> &mdash; artifact-server</h1>
+    <h1><span>Whiteboard</span> &mdash; live broadcast</h1>
     <div class="status">
+      <a class="dl-btn" href="${baseUrl}/" style="text-decoration:none">Gallery</a>
       <button class="dl-btn" id="download-btn" onclick="downloadContent()" style="display:none">Download</button>
       <span id="status-text">Connecting...</span>
       <div class="status-dot" id="status-dot"></div>
@@ -213,8 +254,9 @@ function whiteboardPageHtml(baseUrl) {
   <div class="canvas-area" id="canvas-area">
     <div class="empty-state" id="empty-state">
       <h2>Waiting for content</h2>
-      <p>Claude will push SVG/HTML here via the <code>write_whiteboard</code> tool.<br>
+      <p>Claude will push SVG / Mermaid / HTML here via the <code>write_whiteboard</code> tool.<br>
       Content renders instantly &mdash; no compilation, no page reload.</p>
+      <div class="hint">Whiteboards now <strong>persist by default</strong>. Find past boards in the <a href="${baseUrl}/" style="color:#60a5fa">Gallery</a> or pass <code>persist:false</code> for ephemeral broadcasts.</div>
     </div>
     <div class="title-bar" id="title-bar">
       <span class="title" id="content-title"></span>

@@ -391,6 +391,143 @@ async function runTests() {
     await sseClient.waitForEvent(e => e.title === 'Large SVG (200 circles)', 3000);
   });
 
+  // ── 10. Persistence + Mermaid (v2.2) ──
+  console.log('\n\x1b[1m10. Persistence + Mermaid (v2.2)\x1b[0m');
+
+  const stamp = Date.now();
+  let persistedSvgSlug, persistedMermaidSlug, brokenMermaidSlug, ephemeralCallCount = 0;
+
+  await test('write_whiteboard-persists-by-default', async () => {
+    const slug = `test-wb-svg-${stamp}`;
+    const res = await mcpCall('tools/call', {
+      name: 'write_whiteboard',
+      arguments: {
+        content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"><rect x="10" y="10" width="180" height="80" fill="#1e40af"/><text x="100" y="55" text-anchor="middle" fill="white">PersistTest</text></svg>',
+        title: 'Persist test SVG',
+        slug,
+      },
+    });
+    const result = JSON.parse(res.body).result;
+    assert(!result.isError, `Tool error: ${result?.content?.[0]?.text}`);
+    const data = JSON.parse(result.content[0].text);
+    assert(data.persisted === true, `Expected persisted=true, got ${data.persisted}`);
+    assert(data.validated === true, `Expected validated=true, got ${JSON.stringify(data.validation_errors || data)}`);
+    assert(data.url && data.url.includes(slug), `Missing or wrong url: ${data.url}`);
+    persistedSvgSlug = slug;
+  });
+
+  await test('persisted-whiteboard-appears-in-list_artifacts', async () => {
+    const res = await mcpCall('tools/call', { name: 'list_artifacts', arguments: {} });
+    const arr = JSON.parse(JSON.parse(res.body).result.content[0].text);
+    const found = arr.find(a => a.slug === persistedSvgSlug);
+    assert(found, `Persisted whiteboard ${persistedSvgSlug} missing from list_artifacts`);
+    assert(found.type === 'whiteboard', `Expected type=whiteboard, got ${found.type}`);
+    assert(found.whiteboardFormat === 'svg', `Expected whiteboardFormat=svg, got ${found.whiteboardFormat}`);
+  });
+
+  await test('persisted-whiteboard-viewer-renders', async () => {
+    const res = await get(`/artifacts/${persistedSvgSlug}.html`);
+    assert(res.status === 200, `Status ${res.status}`);
+    assert(res.body.includes('wb-source'), 'Viewer missing wb-source script');
+    assert(res.body.includes('PersistTest'), 'Viewer missing source content');
+  });
+
+  await test('mermaid-format-auto-detected', async () => {
+    const slug = `test-wb-mermaid-${stamp}`;
+    const res = await mcpCall('tools/call', {
+      name: 'write_whiteboard',
+      arguments: {
+        content: 'graph TD\n  A[Start] --> B{Decide}\n  B -->|yes| C[End]\n  B -->|no| A',
+        title: 'Mermaid auto-detect test',
+        slug,
+      },
+    });
+    const result = JSON.parse(res.body).result;
+    assert(!result.isError, `Tool error: ${result?.content?.[0]?.text}`);
+    const data = JSON.parse(result.content[0].text);
+    assert(data.format === 'mermaid', `Expected format=mermaid, got ${data.format}`);
+    assert(data.persisted === true, `Expected persisted=true`);
+    assert(data.validated === true, `Mermaid render validation failed: ${JSON.stringify(data.validation_errors)}`);
+    persistedMermaidSlug = slug;
+  });
+
+  await test('mermaid-viewer-loads-mermaid-cdn', async () => {
+    const res = await get(`/artifacts/${persistedMermaidSlug}.html`);
+    assert(res.status === 200, `Status ${res.status}`);
+    assert(res.body.includes('mermaid'), 'Mermaid viewer missing mermaid CDN ref');
+    assert(res.body.includes('mermaid.run'), 'Mermaid viewer missing mermaid.run() invocation');
+  });
+
+  await test('mermaid-syntax-error-fails-validation-and-stores-source', async () => {
+    const slug = `test-wb-broken-${stamp}`;
+    const res = await mcpCall('tools/call', {
+      name: 'write_whiteboard',
+      arguments: {
+        content: 'graph TD\n  A --> B[Unclosed',  // missing closing bracket
+        title: 'Broken mermaid',
+        slug,
+      },
+    });
+    const result = JSON.parse(res.body).result;
+    assert(result.isError === true, `Expected isError=true on bad mermaid`);
+    const data = JSON.parse(result.content[0].text);
+    assert(data.error === 'validation_failed', `Expected validation_failed, got ${data.error}`);
+    assert(data.source_stored === true, 'Source should still be stored on validation failure');
+    assert(data.url && data.url.includes(slug), 'Should still return viewer url for inspection');
+    brokenMermaidSlug = slug;
+  });
+
+  await test('patch_whiteboard-fixes-broken-mermaid', async () => {
+    const res = await mcpCall('tools/call', {
+      name: 'patch_whiteboard',
+      arguments: {
+        slug: brokenMermaidSlug,
+        patches: [{ search: 'B[Unclosed', replace: 'B[Closed]' }],
+      },
+    });
+    const result = JSON.parse(res.body).result;
+    assert(!result.isError, `Patch error: ${result?.content?.[0]?.text}`);
+    const data = JSON.parse(result.content[0].text);
+    assert(data.validated === true, `Patch did not produce valid mermaid: ${JSON.stringify(data.validation_errors)}`);
+    assert(data.patches_applied && data.patches_applied.length === 1, 'Expected 1 patch applied');
+  });
+
+  await test('persist-false-skips-gallery', async () => {
+    const beforeRes = await mcpCall('tools/call', { name: 'list_artifacts', arguments: {} });
+    const before = JSON.parse(JSON.parse(beforeRes.body).result.content[0].text).length;
+    const res = await mcpCall('tools/call', {
+      name: 'write_whiteboard',
+      arguments: {
+        content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><rect width="100" height="50" fill="red"/></svg>',
+        title: 'Ephemeral push',
+        persist: false,
+      },
+    });
+    const result = JSON.parse(res.body).result;
+    assert(!result.isError, `Tool error: ${result?.content?.[0]?.text}`);
+    const data = JSON.parse(result.content[0].text);
+    assert(data.persisted === false, `Expected persisted=false, got ${data.persisted}`);
+    assert(!data.url, 'Should not return permanent url for ephemeral push');
+    assert(data.clients_updated >= 0, 'Should still report clients_updated');
+    const afterRes = await mcpCall('tools/call', { name: 'list_artifacts', arguments: {} });
+    const after = JSON.parse(JSON.parse(afterRes.body).result.content[0].text).length;
+    assert(after === before, `Gallery size changed (${before} -> ${after}); ephemeral should not persist`);
+    ephemeralCallCount++;
+  });
+
+  // Cleanup test artifacts so we don't pollute the gallery on repeated test runs
+  await test('cleanup-test-whiteboards', async () => {
+    const cleanupSlugs = [persistedSvgSlug, persistedMermaidSlug, brokenMermaidSlug].filter(Boolean);
+    for (const slug of cleanupSlugs) {
+      await mcpCall('tools/call', { name: 'delete_artifact', arguments: { slug } });
+    }
+    const res = await mcpCall('tools/call', { name: 'list_artifacts', arguments: {} });
+    const arr = JSON.parse(JSON.parse(res.body).result.content[0].text);
+    for (const slug of cleanupSlugs) {
+      assert(!arr.find(a => a.slug === slug), `Cleanup failed for ${slug}`);
+    }
+  });
+
   // ── 9. SSE Disconnect & Reconnect ──
   console.log('\n\x1b[1m9. SSE Lifecycle\x1b[0m');
 

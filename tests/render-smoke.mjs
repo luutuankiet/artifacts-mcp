@@ -10,12 +10,22 @@
  * Returns exit code 0 if all pass, 1 if any fail.
  */
 import { chromium } from 'playwright-core';
-import { readdir } from 'fs/promises';
-import { resolve, dirname } from 'path';
+import { readdir, readFile } from 'fs/promises';
+import { resolve, dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ARTIFACTS_DIR = resolve(__dirname, '..', 'artifacts');
+const META_DIR = resolve(__dirname, '..', 'artifacts', '.meta');
+
+async function readMeta(slug) {
+  try {
+    const j = await readFile(join(META_DIR, `${slug}.json`), 'utf-8');
+    return JSON.parse(j);
+  } catch {
+    return null;
+  }
+}
 
 // Parse args
 const args = process.argv.slice(2);
@@ -29,7 +39,26 @@ for (let i = 0; i < args.length; i++) {
 async function getSlugs() {
   if (slugFilter) return [slugFilter];
   const files = await readdir(ARTIFACTS_DIR);
-  return files.filter(f => f.endsWith('.html')).map(f => f.replace('.html', ''));
+  const allSlugs = files.filter(f => f.endsWith('.html')).map(f => f.replace('.html', ''));
+
+  // Render-smoke validates the React mount path (#root). Skip artifacts that
+  // don't follow that contract: whiteboards and HTML passthroughs.
+  const eligible = [];
+  const skipped = [];
+  for (const slug of allSlugs) {
+    const meta = await readMeta(slug);
+    if (meta && (meta.type === 'whiteboard' || meta.format === 'html')) {
+      skipped.push({ slug, reason: meta.type === 'whiteboard' ? `whiteboard (${meta.whiteboardFormat || 'html'})` : 'html passthrough' });
+    } else {
+      eligible.push(slug);
+    }
+  }
+  if (skipped.length > 0) {
+    console.log(`Skipping ${skipped.length} non-JSX artifact(s):`);
+    for (const s of skipped) console.log(`  — ${s.slug} [${s.reason}]`);
+    console.log('');
+  }
+  return eligible;
 }
 
 async function smokeTest(browser, slug) {
