@@ -17,7 +17,7 @@ function slugify(title) {
     .substring(0, 60);
 }
 
-function getToolDefinitions() {
+export function getToolDefinitions() {
   const availableLibs = getAvailableLibraries();
   return [
     {
@@ -180,7 +180,7 @@ function jsonRpcErr(id, code, message) {
   return { jsonrpc: '2.0', id, error: { code, message } };
 }
 
-async function handleToolCall(name, args, baseUrl) {
+export async function handleToolCall(name, args, baseUrl) {
   switch (name) {
     case 'publish_artifact': {
       const { source, title, format = 'jsx', slug: customSlug, libraries = [], description = '' } = args;
