@@ -65,7 +65,7 @@ export function galleryHtml(artifacts, baseUrl) {
     (function() {
       try {
         var t = localStorage.getItem('gal-theme');
-        if (!t) t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+        if (!t) t = 'light'; // default to light per project preference; toggle persists user choice
         document.documentElement.setAttribute('data-theme', t);
       } catch(e) { document.documentElement.setAttribute('data-theme', 'dark'); }
     })();

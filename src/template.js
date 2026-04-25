@@ -125,9 +125,9 @@ Object.keys(_libGlobals).forEach(function(name) {
   ${scripts.join('\n  ')}
   ${requireShim}
   <style>
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #ffffff; color: #0f172a; }
     #root { min-height: 100vh; }
-    .artifact-error { color: #dc2626; padding: 2rem; font-family: monospace; white-space: pre-wrap; }
+    .artifact-error { color: #b91c1c; background: #fef2f2; padding: 2rem; font-family: monospace; white-space: pre-wrap; border-radius: 6px; }
   </style>
 </head>
 <body>

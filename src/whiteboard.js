@@ -126,34 +126,34 @@ function whiteboardPageHtml(baseUrl) {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0a0a0a;
-      color: #e0e0e0;
+      background: #ffffff;
+      color: #0f172a;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
     }
     header {
       padding: 12px 20px;
-      background: #111;
-      border-bottom: 1px solid #222;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-shrink: 0;
     }
-    header h1 { font-size: 16px; font-weight: 500; color: #999; }
-    header h1 span { color: #fff; }
+    header h1 { font-size: 16px; font-weight: 500; color: #475569; }
+    header h1 span { color: #0f172a; }
     .status {
       display: flex;
       align-items: center;
       gap: 8px;
       font-size: 13px;
-      color: #666;
+      color: #64748b;
     }
     .status-dot {
       width: 8px; height: 8px;
       border-radius: 50%;
-      background: #333;
+      background: #cbd5e1;
       transition: background 0.3s;
     }
     .status-dot.connected { background: #22c55e; }
@@ -173,17 +173,17 @@ function whiteboardPageHtml(baseUrl) {
     }
     .empty-state {
       text-align: center;
-      color: #444;
+      color: #94a3b8;
     }
-    .empty-state h2 { font-size: 24px; margin-bottom: 8px; color: #555; }
-    .empty-state p { font-size: 14px; line-height: 1.6; }
-    .empty-state .hint { margin-top: 16px; padding: 10px 16px; background: #1a1a1a; border-left: 2px solid #3b82f6; color: #94a3b8; font-size: 13px; text-align: left; max-width: 420px; }
+    .empty-state h2 { font-size: 24px; margin-bottom: 8px; color: #475569; }
+    .empty-state p { font-size: 14px; line-height: 1.6; color: #64748b; }
+    .empty-state .hint { margin-top: 16px; padding: 10px 16px; background: #f1f5f9; border-left: 2px solid #2563eb; color: #475569; font-size: 13px; text-align: left; max-width: 420px; }
     .empty-state code {
-      background: #1a1a1a;
+      background: #f1f5f9;
       padding: 2px 6px;
       border-radius: 4px;
       font-size: 13px;
-      color: #888;
+      color: #475569;
     }
     #whiteboard {
       width: 100%;
@@ -195,49 +195,49 @@ function whiteboardPageHtml(baseUrl) {
     }
     .title-bar {
       font-size: 14px;
-      color: #888;
+      color: #475569;
       padding: 8px 0;
       margin-bottom: 12px;
-      border-bottom: 1px solid #222;
+      border-bottom: 1px solid #e2e8f0;
       display: none;
     }
     .title-bar.visible { display: flex; justify-content: space-between; align-items: center; }
-    .title-bar .title { color: #ccc; font-weight: 500; }
-    .title-bar .meta { font-size: 12px; color: #555; }
+    .title-bar .title { color: #0f172a; font-weight: 500; }
+    .title-bar .meta { font-size: 12px; color: #94a3b8; }
     .history-bar {
       display: flex;
       gap: 6px;
       padding: 8px 20px;
-      background: #111;
-      border-top: 1px solid #222;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
       overflow-x: auto;
       flex-shrink: 0;
     }
     .history-bar:empty { display: none; }
     .history-chip {
       padding: 4px 10px;
-      background: #1a1a1a;
-      border: 1px solid #333;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
       border-radius: 4px;
       font-size: 12px;
-      color: #888;
+      color: #475569;
       cursor: pointer;
       white-space: nowrap;
       transition: all 0.15s;
     }
-    .history-chip:hover { border-color: #555; color: #ccc; }
-    .history-chip.active { border-color: #3b82f6; color: #3b82f6; background: #0f1729; }
+    .history-chip:hover { border-color: #94a3b8; color: #0f172a; }
+    .history-chip.active { border-color: #2563eb; color: #1d4ed8; background: #dbeafe; }
     .dl-btn {
       padding: 4px 12px;
-      background: #1e293b;
-      border: 1px solid #475569;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
       border-radius: 4px;
-      color: #94a3b8;
+      color: #475569;
       font-size: 12px;
       cursor: pointer;
       transition: all 0.15s;
     }
-    .dl-btn:hover { background: #334155; color: #e2e8f0; border-color: #64748b; }
+    .dl-btn:hover { background: #f1f5f9; color: #0f172a; border-color: #94a3b8; }
   </style>
 </head>
 <body>
